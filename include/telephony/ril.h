@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2006,2011 The Android Open Source Project
+ * Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -427,6 +428,8 @@ typedef struct {
 } RIL_NeighboringCell;
 
 /* See RIL_REQUEST_LAST_CALL_FAIL_CAUSE */
+
+/* Add define [3,6,8,18,...,102], 20120510 kaiyou */
 typedef enum {
     CALL_FAIL_UNOBTAINABLE_NUMBER = 1,
     CALL_FAIL_NO_ROUTE_TO_DESTINATION = 3,
@@ -693,7 +696,15 @@ typedef struct
   char             *app_label_ptr;  /* null terminated string */
   int              pin1_replaced;   /* applicable to USIM, CSIM & ISIM */
   RIL_PinState     pin1;
+  int              pin1_num_retries;
+  int              puk1_num_retries;
   RIL_PinState     pin2;
+  int              pin2_num_retries;
+  int              puk2_num_retries;
+  int              perso_retries;
+  /* Added by tiger.su for dual sim slot */
+  int              slot;
+  /* Added end */
 } RIL_AppStatus;
 
 typedef struct

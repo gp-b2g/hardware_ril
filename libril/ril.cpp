@@ -19,7 +19,7 @@
 
 #define LOG_TAG "RILC"
 //uncomment this block to enable logging from this file.
-#if 1
+#if 0
 #define LOG_NDEBUG 0
 #define LOG_NDDEBUG 0
 #define LOG_NIDEBUG 0
@@ -65,7 +65,6 @@ namespace android {
 
 #define ANDROID_WAKE_LOCK_NAME "radio-interface"
 
-
 #define PROPERTY_RIL_IMPL "gsm.version.ril-impl"
 
 // match with constant in RIL.java
@@ -91,7 +90,7 @@ namespace android {
 #define PRINTBUF_SIZE 8096
 
 // Enable RILC log
-#define RILC_LOG 1
+#define RILC_LOG 0
 
 #if RILC_LOG
     #define startRequest           sprintf(printBuf, "(")
@@ -147,7 +146,6 @@ typedef struct UserCallbackInfo {
     struct ril_event event;
     struct UserCallbackInfo *p_next;
 } UserCallbackInfo;
-
 
 /*******************************************************************/
 #define MAX_NUM_CLIENTS 2
@@ -742,6 +740,7 @@ dispatchSmsWrite (Parcel &p, RequestInfo *pRI) {
     return;
 invalid:
     invalidCommandBlock(pRI);
+    RIL_onRequestComplete(pRI, RIL_E_GENERIC_FAILURE, NULL, 0);
     return;
 }
 
@@ -1632,7 +1631,7 @@ static void dispatchRilCdmaSmsWriteArgs(Parcel &p, RequestInfo *pRI) {
     status = p.read(&uct,sizeof(uct));
     rcsw.message.sAddress.number_of_digits = (uint8_t) uct;
 
-    for(digitCount = 0 ; digitCount < RIL_CDMA_SMS_ADDRESS_MAX; digitCount ++) {
+    for(digitCount = 0 ; digitCount < rcsw.message.sAddress.number_of_digits; digitCount ++) {
         status = p.read(&uct,sizeof(uct));
         rcsw.message.sAddress.digits[digitCount] = (uint8_t) uct;
     }
@@ -1646,7 +1645,7 @@ static void dispatchRilCdmaSmsWriteArgs(Parcel &p, RequestInfo *pRI) {
     status = p.read(&uct,sizeof(uct));
     rcsw.message.sSubAddress.number_of_digits = (uint8_t) uct;
 
-    for(digitCount = 0 ; digitCount < RIL_CDMA_SMS_SUBADDRESS_MAX; digitCount ++) {
+    for(digitCount = 0 ; digitCount < rcsw.message.sSubAddress.number_of_digits; digitCount ++) {
         status = p.read(&uct,sizeof(uct));
         rcsw.message.sSubAddress.digits[digitCount] = (uint8_t) uct;
     }
@@ -1654,7 +1653,7 @@ static void dispatchRilCdmaSmsWriteArgs(Parcel &p, RequestInfo *pRI) {
     status = p.readInt32(&t);
     rcsw.message.uBearerDataLen = (int) t;
 
-    for(digitCount = 0 ; digitCount < RIL_CDMA_SMS_BEARER_DATA_MAX; digitCount ++) {
+    for(digitCount = 0 ; digitCount < rcsw.message.uBearerDataLen; digitCount ++) {
         status = p.read(&uct, sizeof(uct));
         rcsw.message.aBearerData[digitCount] = (uint8_t) uct;
     }
@@ -2944,7 +2943,13 @@ static void sendSimStatusAppInfo(Parcel &p, int num_apps, RIL_AppStatus appStatu
                                           (appStatus[i].app_label_ptr));
             p.writeInt32(appStatus[i].pin1_replaced);
             p.writeInt32(appStatus[i].pin1);
+            p.writeInt32(appStatus[i].pin1_num_retries);
+            p.writeInt32(appStatus[i].puk1_num_retries);
             p.writeInt32(appStatus[i].pin2);
+            p.writeInt32(appStatus[i].pin2_num_retries);
+            p.writeInt32(appStatus[i].puk2_num_retries);
+            p.writeInt32(appStatus[i].perso_retries);
+            p.writeInt32(appStatus[i].slot);
             appendPrintBuf("%s[app_type=%d,app_state=%d,perso_substate=%d,\
                     aid_ptr=%s,app_label_ptr=%s,pin1_replaced=%d,pin1=%d,pin2=%d],",
                     printBuf,
@@ -3182,8 +3187,7 @@ static void processCommandsCallback(int fd, short flags, void *param) {
     size_t recordlen;
     int ret;
 
-    //int client_id = mapClientFD(fd);
-	int client_id = 0;
+    int client_id = mapClientFD(fd);
     assert(fd == s_fdCommand[client_id]);
     p_rs[client_id] = (RecordStream *)param;
 
@@ -3229,8 +3233,7 @@ static void processCommandsCallback(int fd, short flags, void *param) {
 
 
 static void onNewCommandConnect(int fd) {
-    //int client_id = mapClientFD(fd);
-	int client_id = 0;
+    int client_id = mapClientFD(fd);
     // Inform we are connected and the ril version
     int rilVer = s_callbacks[client_id].version;
     RIL_onUnsolicitedSendResponse(RIL_UNSOL_RIL_CONNECTED,
@@ -3279,8 +3282,7 @@ static void listenCallback (int fd, short flags, void *param) {
     assert (fd == s_fdListen);
 
     fd = accept(s_fdListen, (sockaddr *) &peeraddr, &socklen);
-    //int client_id = addClientFd(fd);
-	int client_id = 0;
+    int client_id = addClientFd(fd);
     LOGD("client id:%d", client_id);
     if(client_id == -1) {
         LOGD("Max no of clients reached");
@@ -3384,8 +3386,7 @@ static void debugCallback (int fd, short flags, void *param) {
 
     acceptFD = accept (fd,  (sockaddr *) &peeraddr, &socklen);
 
-    //int client_id = addClientFd(acceptFD);
-	int client_id = 0;
+    int client_id = addClientFd(acceptFD);
     if(client_id == -1)
     {
         LOGE("Max no of clients reached");
@@ -4350,28 +4351,28 @@ requestToString(int request) {
 int isMultiSimEnabled()
 {
     int enabled = 0;
-    char prop_val[PROPERTY_VALUE_MAX];
+    /*char prop_val[PROPERTY_VALUE_MAX];
     if (property_get("persist.dsds.enabled", prop_val, "0") > 0)
     {
         if (strncmp(prop_val, "true", 4) == 0) {
             enabled = 1;
         }
         LOGE("isMultiSimEnabled: prop_val = %s enabled = %d", prop_val, enabled);
-    }
+    }*/
     return enabled;
 }
 
 int isMultiRild()
 {
     int enabled = 0;
-    char prop_val[PROPERTY_VALUE_MAX];
+    /*char prop_val[PROPERTY_VALUE_MAX];
     if (property_get("ro.multi.rild", prop_val, "0") > 0)
     {
         if (strncmp(prop_val, "true", 4) == 0) {
             enabled = 1;
         }
         LOGD("isMultiRild: prop_val = %s enabled = %d", prop_val, enabled);
-    }
+    }*/
     return enabled;
 }
 

@@ -2480,14 +2480,14 @@ static void usage(char *s)
 static int isDSDSEnabled()
 {
     int enabled = 0;
-    char prop_val[PROPERTY_VALUE_MAX];
+    /*char prop_val[PROPERTY_VALUE_MAX];
     if (property_get("persist.dsds.enabled", prop_val, "false") > 0)
     {
         if (strncmp(prop_val, "true", 4) == 0) {
             enabled = 1;
         }
     }
-    LOGD("REF_RIL: isDSDSEnabled: prop_val = %s enabled = %d", prop_val, enabled);
+    LOGD("REF_RIL: isDSDSEnabled: prop_val = %s enabled = %d", prop_val, enabled);*/
     return enabled;
 }
 
