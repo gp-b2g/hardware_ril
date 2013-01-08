@@ -1,6 +1,5 @@
 /*
  * Copyright (C) 2006,2011 The Android Open Source Project
- * Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -72,11 +71,7 @@ typedef enum {
     RIL_E_SS_MODIFIED_TO_DIAL = 23,             /* SS request modified to DIAL */
     RIL_E_SS_MODIFIED_TO_USSD = 24,             /* SS request modified to USSD */
     RIL_E_SS_MODIFIED_TO_SS = 25,               /* SS request modified to different SS request */
-    RIL_E_SUBSCRIPTION_NOT_SUPPORTED = 26,      /* Subscription not supported by RIL */
-    RIL_E_INVALID_PARAMETER = 27,               /* Invalid parameter given in a
-                                                   RIL_REQUEST_MODIFY_CALL_INITIATE */
-    RIL_E_REJECTED_BY_REMOTE = 28,              /* Remote end rejected a change started by
-                                                   RIL_REQUEST_MODIFY_CALL_INITIATE */
+    RIL_E_SUBSCRIPTION_NOT_SUPPORTED = 26       /* Subscription not supported by RIL */
 } RIL_Errno;
 
 typedef enum {
@@ -195,47 +190,6 @@ typedef struct {
   char signal;       /* as defined 3.7.5.5-3, 3.7.5.5-4 or 3.7.5.5-5 */
 } RIL_CDMA_SignalInfoRecord;
 
-typedef enum {
-    RIL_CALL_TYPE_VOICE = 0, /* Voice only call */
-    RIL_CALL_TYPE_VS_TX = 1, /* Video sharing call:
-                              * tx-only video, bi-directional audio */
-    RIL_CALL_TYPE_VS_RX = 2, /* Video sharing call: rx-only video,
-                              * bi-directional audio */
-    RIL_CALL_TYPE_VT = 3,    /* Video telephony call: two way video,
-                              * two way audio */
-} RIL_Call_Type;
-
-typedef enum {
-    RIL_CALL_DOMAIN_UNKNOWN = 0,   /* Unknown domain. Sent by RIL when modem
-                                    * has not yet selected a
-                                    * domain for a call */
-    RIL_CALL_DOMAIN_CS = 1,        /* Circuit switched domain */
-    RIL_CALL_DOMAIN_PS = 2,        /* Packet switched domain */
-    RIL_CALL_DOMAIN_AUTOMATIC = 3, /* Automatic domain. Sent by Android to
-                                    * indicate that the domain
-                                    * for a new call should be selected by modem */
-} RIL_Call_Domain;
-
-typedef struct {
-    RIL_Call_Type   callType;   /* Initial call type to use */
-    RIL_Call_Domain callDomain; /* Call domain to place the call on.
-                                 * Modem is expected to respect
-                                 * the selected call domain.
-                                 * When domain is AUTOMATIC, modem will
-                                 * select the best available domain */
-    int extrasLength;           /* The number of elements in the extra field */
-    const char **extras;        /* A list of additional call attributes,
-                                 * each char * being a key-value pair.
-                                 * The format should be
-                                 * <namespace>:<param-name>=<value>
-                                   e.g. vt:picture-size=320x240 */
-} RIL_Call_Details;
-
-typedef struct {
-    int             callIndex;
-    RIL_Call_Details *callDetails;
-} RIL_Call_Modify;
-
 typedef struct {
     RIL_CallState   state;
     int             index;      /* Connection Index for use with, eg, AT+CHLD */
@@ -251,7 +205,6 @@ typedef struct {
     char *          name;       /* Remote party name */
     int             namePresentation; /* 0=Allowed, 1=Restricted, 2=Not Specified/Unknown 3=Payphone */
     RIL_UUS_Info *  uusInfo;    /* NULL or Pointer to User-User Signaling Information */
-    RIL_Call_Details * callDetails; /* NULL or Pointer to the current call detail */
 } RIL_Call;
 
 /* Deprecated, use RIL_Data_Call_Response_v6 */
@@ -350,7 +303,6 @@ typedef struct {
              * clir == 2 on "CLIR suppression" (allow CLI presentation)
              */
     RIL_UUS_Info *  uusInfo;    /* NULL or Pointer to User-User Signaling Information */
-    RIL_Call_Details *callDetails;
 } RIL_Dial;
 
 typedef struct {
@@ -428,87 +380,12 @@ typedef struct {
 } RIL_NeighboringCell;
 
 /* See RIL_REQUEST_LAST_CALL_FAIL_CAUSE */
-
-/* Add define [3,6,8,18,...,102], 20120510 kaiyou */
 typedef enum {
     CALL_FAIL_UNOBTAINABLE_NUMBER = 1,
-    CALL_FAIL_NO_ROUTE_TO_DESTINATION = 3,
-    CALL_FAIL_CHANNEL_UNACCEPTABLE = 6,
-    CALL_FAIL_OPERATOR_DETERMINED_BARRING = 8,
-    //OPERATOR_DETERMINED_BARRING = 8,
-
     CALL_FAIL_NORMAL = 16,
     CALL_FAIL_BUSY = 17,
-
-    NO_USER_RESPONDING = 18,
-    USER_ALERTING_NO_ANSWER = 19,
-    CALL_REJECTED = 21,
-    DESTINATION_OUT_OF_ORDER = 27,
-    INVALID_NUMBER = 28,
-
-    //CALL_FAIL_NO_USER_RESPONDING = 18,
-    //CALL_FAIL_USER_ALERTING_NO_ANSWER = 19,
-
-    //CALL_FAIL_CALL_REJECTED = 21,
-    CALL_FAIL_NUMBER_CHANGED = 22,
-    CALL_FAIL_PRE_EMPTION = 25,
-    //CALL_FAIL_DESTINATION_OUT_OF_ORDER = 27,
-    CALL_FAIL_NON_SELECTED_USER_CLEARING = 26,
-    //CALL_FAIL_INVALID_NUMBER_FORMAT = 28,
-    CALL_FAIL_FACILITY_REJECTED = 29,
-
-    CALL_FAIL_RESPONSE_TO_STATUS_ENQUIRY = 30,
-    CALL_FAIL_NORMAL_UNSPECIFIED = 31,
     CALL_FAIL_CONGESTION = 34,
-    CALL_FAIL_NETWORK_OUT_OF_ORDER = 38,
-
-    CALL_FAIL_TEMPORARY_FAILURE = 41,
-    CALL_FAIL_SWITCHING_EQUIPMENT_CONGESTION = 42,
-    CALL_FAIL_ACCESS_INFORMATION_DISCARDED = 43,
-    CALL_FAIL_REQUESTED_CIRCUIT_CHANNEL_NOT_AVAILABLE = 44,
-    CALL_FAIL_RESOURCES_UNAVAILABLE_UNSPECIFIED = 47,
-    //CALL_FAIL_QUALITY_OF_SERVICE_UNAVAILABLE = 49,
-
-    //RESOURCES_UNAVAILABLE = 47,
-    QOS_NOT_AVAIL = 49,
-    LOCAL_PHONE_OUT_OF_3G_SERVICE = 52,
-    BEARER_NOT_AUTHORIAZTION = 57,
-    BEARER_NOT_AVAIL = 58,
-    BEARER_NOT_SUPPORTED_65 = 65,
-
-    CALL_FAIL_REQUESTED_FACILITY_NOT_SUBSCRIBED = 50,
-    CALL_FAIL_INCOMING_CALLS_BARRED_WITHIN_THE_CUG = 55,
-    //CALL_FAIL_BEARER_CAPABILITY_NOT_AUTHORIZED = 57,
-    //CALL_FAIL_BEARER_CAPABILITY_NOT_PRESENTLY_AVAILABLE = 58,
-
-    CALL_FAIL_SERVICES_OR_OPTION_NOT_AVAILABLE_UNSPECIFIED = 63,
-    //CALL_FAIL_BEARER_SERVICE_NOT_IMPLEMENTED = 65,
     CALL_FAIL_ACM_LIMIT_EXCEEDED = 68,
-    CALL_FAIL_REQUESTED_FACILITY_NOT_MPLEMENTED = 69,
-
-    CALL_FAIL_ONLY_RESTRICTED_DIGITAL_INFORMATION = 70,
-    //CALL_FAIL_SERVICE_OR_OPTION_NOT_IMPLEMENTED = 79,
-    CALL_FAIL_INVALID_TRANSACTION_IDENTIFIER_VALUE = 81,
-    CALL_FAIL_USER_NOT_MEMBER_OF_CUG = 87,
-    //CALL_FAIL_INCOMPATIBLE_DESTINATION = 88,
-
-    BEARER_NOT_SUPPORTED_79 = 79,
-    INCOMPATIBILITY_DESTINATION = 88,
-    PROTOCOL_ERROR_UNSPECIFIED = 111,
-
-    CALL_FAIL_INVALID_TRANSIT_NETWORK_SELECTION = 91,
-    CALL_FAIL_SEMANTICALLY_INCORRECT_MESSAGE = 95,
-    CALL_FAIL_INVALID_MANDATORY_INFORMATION = 96,
-    CALL_FAIL_MESSAGE_TYPE_NONEXISTENT_OR_NOT_IMPLEMENTED= 97,
-    CALL_FAIL_MESSAGE_TYPE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE = 98,
-    CALL_FAIL_INFORMATION_ELEMENT_NONEXISTENT = 99,
-
-    CALL_FAIL_CONDITIONAL_IE_ERROR = 100,
-    CALL_FAIL_MESSAGE_NOT_COMPATIBLE_WITH_PROTOCOL_STATE = 101,
-    CALL_FAIL_RECOVERY_ON_TIMER_EXPIRY = 102,
-    //CALL_FAIL_PROTOCOL_ERROR_UNSPECIFIED = 111,
-    CALL_FAIL_INTERWORKING_UNSPECIFIED = 127,
-
     CALL_FAIL_CALL_BARRED = 240,
     CALL_FAIL_FDN_BLOCKED = 241,
     CALL_FAIL_IMSI_UNKNOWN_IN_VLR = 242,
@@ -527,23 +404,6 @@ typedef enum {
     CALL_FAIL_CDMA_NOT_EMERGENCY = 1008, /* For non-emergency number dialed
                                             during emergency callback mode */
     CALL_FAIL_CDMA_ACCESS_BLOCKED = 1009, /* CDMA network access probes blocked */
-
-    CALL_FAIL_NETWORK_UNAVAILABLE = 1010, /* PS network is unavailable
-                                       * Remote party is temporarily camped on
-                                       * non PS network.
-                                       * Originating / remote party lost PS
-                                       * coverage during the call
-                                       * UI prompts user to retry call on CS*/
-
-    CALL_FAIL_FEATURE_UNAVAILABLE = 1011, /* User has not subscribed for this
-                                       * service. UI prompts user to retry call
-                                       * on CS*/
-
-    CALL_FAIL_SIP_ERROR = 1012, /* Sip timeout or dialog not present error during
-                                      * call upgrade/downgrade
-                                      * SIP error code 481/408
-                                      * sent by IMS stack. UI does not take
-                                      * any action on this error code.*/
     CALL_FAIL_ERROR_UNSPECIFIED = 0xffff
 } RIL_LastCallFailCause;
 
@@ -696,15 +556,7 @@ typedef struct
   char             *app_label_ptr;  /* null terminated string */
   int              pin1_replaced;   /* applicable to USIM, CSIM & ISIM */
   RIL_PinState     pin1;
-  int              pin1_num_retries;
-  int              puk1_num_retries;
   RIL_PinState     pin2;
-  int              pin2_num_retries;
-  int              puk2_num_retries;
-  int              perso_retries;
-  /* Added by tiger.su for dual sim slot */
-  int              slot;
-  /* Added end */
 } RIL_AppStatus;
 
 typedef struct
@@ -2127,11 +1979,7 @@ typedef struct {
  * RIL_REQUEST_SWITCH_WAITING_OR_HOLDING_AND_ACTIVE will be used in this case
  * instead
  *
- * "data" is int *, but can be NULL
- * ((int *)data)[0] is RIL_Call_Type.
- *      Used to provide a mechanism to reject a Video Telephony
- *      Call, but still answer it as Voice only call. Should we allow full
- *      RIL_Call_Details here to allow for capabilities negotiation of media?
+ * "data" is NULL
  * "response" is NULL
  *
  * Valid errors:
@@ -3937,66 +3785,11 @@ typedef struct {
  *  SUCCESS
  *  GENERIC_FAILURE
  */
-
 #define RIL_REQUEST_RESUME_QOS 123
 
-/**
- * RIL_REQUEST_MODIFY_CALL_INITIATE
- *
- * Request sent to propose parameter changes for which a confirmation
- * from the remote end is required (e.g. call type upgrade/downgrade)
- *
- * This will be followed by a RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED
- * when parameters were changed
- * successfully.
- *
- * "data" is RIL_Call_Modify *
- *
- * "response" is NULL. The actual parameters selected are given
- * through GET_CURRENT_CALLS
- *
- * Valid errors:
- *  SUCCESS
- *  INVALID_PARAMETER
- *  REJECTED_BY_REMOTE
- *  GENERIC_FAILURE
- *
- * See also: RIL_UNSOL_MODIFY_CALL
- *           RIL_REQUEST_MODIFY_CALL_CONFIRM
- */
-#define RIL_REQUEST_MODIFY_CALL_INITIATE 124
-
-/**
- * RIL_REQUEST_MODIFY_CALL_CONFIRM
- *
- * Sent by the receiver of RIL_UNSOL_MODIFY_CALL to confirm the parameters
- * to be used for the call going forward. This will be followed by
- * RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED if setting of parameters succeeded.
- *
- * "data" is RIL_Call_Modify *.
- *
- * "response" is NULL. The actual parameters selected are given through
- * GET_CURRENT_CALLS
- *
- * Valid errors:
- *  SUCCESS
- *  GENERIC_FAILURE
- */
-#define RIL_REQUEST_MODIFY_CALL_CONFIRM 125
-
-#define RIL_REQUEST_CDMA_AVOID_SYSTEM 126
-
-#define RIL_REQUEST_DIAL_VT 127
-
-#define RIL_REQUEST_HANGUP_VT 128
-
-#define RIL_REQUEST_ANSWER_VT 129
-
-#define RIL_REQUEST_ENABLE_ENGINEER_MODE 130
-
-
-
 /***********************************************************************/
+
+
 
 #define RIL_UNSOL_RESPONSE_BASE 1000
 
@@ -4560,27 +4353,6 @@ typedef struct {
  */
 #define RIL_UNSOL_QOS_STATE_CHANGED_IND 1042
 
-/**
- * RIL_UNSOL_MODIFY_CALL_REQUEST
- *
- * Indication sent when modem receives a request to change parameters
- * that require confirmation, including call type (upgrade/downgrade).
- * After receiving this UNSOL, framework will reply with a
- * RIL_REQUEST_MODIFY_CALL_CONFIRM
- *
- * "data" is a RIL_Call_Modify *
- *
- * See also: RIL_REQUEST_MODIFY_CALL_INITIATE
- *           RIL_REQUEST_MODIFY_CALL_CONFIRM
- */
-#define RIL_UNSOL_MODIFY_CALL 1043
-
-#define RIL_UNSOL_CALL_RING_VT 1044
-
-/**
- * RIL_UNSOL_ENGINEER_MODE
- */
-#define RIL_UNSOL_ENGINEER_MODE 1045
 
 /***********************************************************************/
 
