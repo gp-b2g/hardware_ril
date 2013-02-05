@@ -2,7 +2,6 @@
 **
 ** Copyright 2006, The Android Open Source Project
 ** Copyright (c) 2010-2012, Code Aurora Forum. All rights reserved.
-** Not a contribution
 **
 ** Licensed under the Apache License, Version 2.0 (the "License");
 ** you may not use this file except in compliance with the License.
@@ -90,7 +89,7 @@ namespace android {
 #define PRINTBUF_SIZE 8096
 
 // Enable RILC log
-#define RILC_LOG 0
+#define RILC_LOG 1
 
 #if RILC_LOG
     #define startRequest           sprintf(printBuf, "(")
@@ -219,7 +218,6 @@ static void dispatchVoid (Parcel& p, RequestInfo *pRI);
 static void dispatchString (Parcel& p, RequestInfo *pRI);
 static void dispatchStrings (Parcel& p, RequestInfo *pRI);
 static void dispatchInts (Parcel& p, RequestInfo *pRI);
-static void dispatchVoidOrInts (Parcel& p, RequestInfo *pRI);
 static void dispatchDial (Parcel& p, RequestInfo *pRI);
 static void dispatchSIM_IO (Parcel& p, RequestInfo *pRI);
 static void dispatchCallForward(Parcel& p, RequestInfo *pRI);
@@ -236,8 +234,6 @@ static void dispatchImsGsmSms(Parcel &p, RequestInfo *pRI, uint8_t retry, int32_
 static void dispatchCdmaSmsAck(Parcel &p, RequestInfo *pRI);
 static void dispatchGsmBrSmsCnf(Parcel &p, RequestInfo *pRI);
 static void dispatchCdmaBrSmsCnf(Parcel &p, RequestInfo *pRI);
-static void dispatchCallDetails (Parcel &p, RIL_Call_Details* callDetails );
-static void dispatchModifyCall (Parcel &p, RequestInfo *pRI);
 static void dispatchRilCdmaSmsWriteArgs(Parcel &p, RequestInfo *pRI);
 
 static void dispatchUiccSubscripton(Parcel &p, RequestInfo *pRI);
@@ -263,10 +259,8 @@ static int responseCdmaInformationRecords(Parcel &p,void *response, size_t respo
 static int responseRilSignalStrength(Parcel &p,void *response, size_t responselen);
 static int responseCallRing(Parcel &p, void *response, size_t responselen);
 static int responseCdmaSignalInfoRecord(Parcel &p,void *response, size_t responselen);
-static int responseModifyCall(Parcel &p, void *response, size_t responselen);
 static int responseCdmaCallWaiting(Parcel &p,void *response, size_t responselen);
 static int responseGetDataCallProfile(Parcel &p, void *response, size_t responselen);
-static int responseEngineerMode(Parcel &p, void *response, size_t responselen);
 static int responseUiccSubscription(Parcel &p, void *response,size_t responselen);
 static int responseSSData(Parcel &p, void *response, size_t responselen);
 static int responseSimRefresh(Parcel &p, void *response, size_t responselen);
@@ -593,55 +587,6 @@ invalid:
     return;
 }
 
-/** Callee expects const int or null * */
-static void
-dispatchVoidOrInts (Parcel &p, RequestInfo *pRI) {
-    int32_t count;
-    status_t status;
-    size_t datalen;
-    int *pInts;
-
-    status = p.readInt32 (&count);
-
-    if (status != NO_ERROR || count == 0) {
-        clearPrintBuf;
-        printRequest(pRI->token, pRI->pCI->requestNumber);
-        s_callbacks[pRI->client_id].onRequest(pRI->pCI->requestNumber, NULL, 0, pRI);
-        return;
-    }
-
-    datalen = sizeof(int) * count;
-    pInts = (int *)alloca(datalen);
-
-    startRequest;
-    for (int i = 0 ; i < count ; i++) {
-        int32_t t;
-
-        status = p.readInt32(&t);
-        pInts[i] = (int)t;
-        appendPrintBuf("%s%d,", printBuf, t);
-
-        if (status != NO_ERROR) {
-            goto invalid;
-        }
-   }
-   removeLastChar;
-   closeRequest;
-   printRequest(pRI->token, pRI->pCI->requestNumber);
-
-   s_callbacks[pRI->client_id].onRequest(pRI->pCI->requestNumber, const_cast<int *>(pInts),
-                       datalen, pRI);
-
-#ifdef MEMSET_FREED
-    memset(pInts, 0, datalen);
-#endif
-
-    return;
-invalid:
-    invalidCommandBlock(pRI);
-    return;
-}
-
 /** Callee expects const int * */
 static void
 dispatchInts (Parcel &p, RequestInfo *pRI) {
@@ -744,14 +689,11 @@ invalid:
     return;
 }
 
-
 /**
  * Callee expects const RIL_Dial *
  * Payload is:
  *   String address
  *   int32_t clir
- *   RIL_UUS_Info *  uusInfo
- *   RIL_Call_Details *callDetails
  */
 static void
 dispatchDial (Parcel &p, RequestInfo *pRI) {
@@ -761,10 +703,6 @@ dispatchDial (Parcel &p, RequestInfo *pRI) {
     int32_t t;
     int32_t uusPresent;
     status_t status;
-    RIL_Call_Details callDetails;
-    int32_t callDetailsPresent = 0;
-    int32_t extrasLength = 0;
-    int32_t datalen = 0;
 
     memset (&dial, 0, sizeof(dial));
 
@@ -779,11 +717,8 @@ dispatchDial (Parcel &p, RequestInfo *pRI) {
 
     if (s_callbacks[pRI->client_id].version < 3) { // Remove when partners upgrade to version 3
         uusPresent = 0;
-        callDetailsPresent = 0;
-        sizeOfDial = sizeof(dial) - sizeof(RIL_UUS_Info *) - sizeof(RIL_Call_Details *);
-
+        sizeOfDial = sizeof(dial) - sizeof(RIL_UUS_Info *);
     } else {
-
         status = p.readInt32(&uusPresent);
 
         if (status != NO_ERROR) {
@@ -824,71 +759,16 @@ dispatchDial (Parcel &p, RequestInfo *pRI) {
             uusInfo.uusLength = len;
             dial.uusInfo = &uusInfo;
         }
-
-        startRequest;
-        appendPrintBuf("%snum=%s,clir=%d", printBuf, dial.address, dial.clir);
-        if (uusPresent) {
-            appendPrintBuf("%s,uusType=%d,uusDcs=%d,uusLen=%d", printBuf,
-                    dial.uusInfo->uusType, dial.uusInfo->uusDcs,
-                    dial.uusInfo->uusLength);
-        }
-        if (RIL_QCOM_VERSION < 2) {
-            //backward compatibility for older ril
-            sizeOfDial = sizeof(dial) - sizeof(RIL_Call_Details *);
-        } else if (p.dataAvail() == 0) {
-            dial.callDetails = NULL;
-            sizeOfDial = sizeof(dial);
-        } else {
-            status = p.readInt32(&t);
-            if (status != NO_ERROR) {
-                goto invalid;
-            }
-
-            callDetailsPresent = (int)t;
-            memset (&callDetails, 0, sizeof(callDetails));
-            appendPrintBuf("%s callDetailsPresent=%d", printBuf, callDetailsPresent);
-
-            if (callDetailsPresent){
-
-                status = p.readInt32(&t);
-                callDetails.callType = (RIL_Call_Type) t;
-
-                status = p.readInt32(&t);
-                callDetails.callDomain = (RIL_Call_Domain) t;
-
-                status = p.readInt32(&t);
-                extrasLength = (int)t;
-
-                appendPrintBuf("%s,CallType=%d,CallDomain=%d,extrasLength=%d", printBuf,
-                        callDetails.callType, callDetails.callDomain,
-                        extrasLength);
-
-                if (extrasLength == 0) {
-                    // just some non-null pointer
-                    callDetails.extras = (const char **)alloca(sizeof(char *));
-                    extrasLength = 0;
-                } else if (((int) extrasLength) == -1) {
-                    // The java code writes -1 for null arrays
-                    callDetails.extras = NULL;
-                    extrasLength = 0;
-                } else {
-                    datalen = sizeof(char *) * extrasLength;
-                    callDetails.extras = (const char **)alloca(datalen);
-
-                    for (int i = 0 ; i < extrasLength ; i++) {
-                        callDetails.extras[i] = strdupReadString(p);
-                        appendPrintBuf("%s%s,", printBuf, callDetails.extras[i]);
-                    }
-                }
-                callDetails.extrasLength = extrasLength;
-                dial.callDetails = &callDetails;
-            } else {
-                dial.callDetails = NULL;
-            }
-            sizeOfDial = sizeof(dial);
-        }
+        sizeOfDial = sizeof(dial);
     }
 
+    startRequest;
+    appendPrintBuf("%snum=%s,clir=%d", printBuf, dial.address, dial.clir);
+    if (uusPresent) {
+        appendPrintBuf("%s,uusType=%d,uusDcs=%d,uusLen=%d", printBuf,
+                dial.uusInfo->uusType, dial.uusInfo->uusDcs,
+                dial.uusInfo->uusLength);
+    }
     closeRequest;
     printRequest(pRI->token, pRI->pCI->requestNumber);
 
@@ -897,105 +777,12 @@ dispatchDial (Parcel &p, RequestInfo *pRI) {
 #ifdef MEMSET_FREED
     memsetString (dial.address);
 #endif
-    free (dial.address);
 
-    if ((dial.callDetails!= NULL) && ((dial.callDetails)->extras != NULL)) {
-        for (int i = 0 ; i < (dial.callDetails)->extrasLength ; i++) {
-#ifdef MEMSET_FREED
-            memsetString ((char*)((dial.callDetails)->extras[i]));
-#endif
-            free((char*)((dial.callDetails)->extras[i]));
-        }
-        memset((dial.callDetails)->extras, 0, sizeof((dial.callDetails)->extras));
-    }
+    free (dial.address);
 
 #ifdef MEMSET_FREED
     memset(&uusInfo, 0, sizeof(RIL_UUS_Info));
-    memset(&callDetails, 0, sizeof(RIL_Call_Details));
     memset(&dial, 0, sizeof(dial));
-#endif
-
-    return;
-invalid:
-    invalidCommandBlock(pRI);
-    return;
-}
-
-/**
- * Callee expects const RIL_Call_Modify *
- * Payload is:
- *   int             callIndex;
- *   RIL_Call_Details *callDetails;
- */
-static void
-dispatchModifyCall (Parcel &p, RequestInfo *pRI) {
-    RIL_Call_Modify callModify;
-    RIL_Call_Details callDetails;
-    int32_t sizeOfCallModify;
-    int32_t t;
-    status_t status;
-    int32_t extrasLength =0;
-    int32_t datalen =0;
-
-    memset (&callModify, 0, sizeof(callModify));
-    startRequest;
-    status = p.readInt32(&t);
-    callModify.callIndex = (int)t;
-
-    appendPrintBuf("%s callIndex=%d", printBuf, callModify.callIndex);
-
-    status = p.readInt32(&t);
-    callDetails.callType = (RIL_Call_Type) t;
-
-    status = p.readInt32(&t);
-    callDetails.callDomain = (RIL_Call_Domain) t;
-
-    status = p.readInt32(&t);
-    extrasLength = (int)t;
-
-    appendPrintBuf("%s,CallType=%d,CallDomain=%d,extrasLength=%d", printBuf,
-            callDetails.callType, callDetails.callDomain,
-            extrasLength);
-
-    if (extrasLength == 0) {
-        // just some non-null pointer
-        callDetails.extras = (const char **)alloca(sizeof(char *));
-        extrasLength = 0;
-    } else if (((int) extrasLength) == -1) {
-        // The java code writes -1 for null arrays
-        callDetails.extras = NULL;
-        extrasLength = 0;
-    } else {
-        datalen = sizeof(char *) * extrasLength;
-        callDetails.extras = (const char **)alloca(datalen);
-
-        for (int i = 0 ; i < extrasLength ; i++) {
-            callDetails.extras[i] = strdupReadString(p);
-            appendPrintBuf("%s%s,", printBuf, callDetails.extras[i]);
-        }
-    }
-    callDetails.extrasLength = extrasLength;
-
-    callModify.callDetails = &callDetails;
-
-    sizeOfCallModify = sizeof(callModify);
-
-    closeRequest;
-    printRequest(pRI->token, pRI->pCI->requestNumber);
-    s_callbacks[pRI->client_id].onRequest(pRI->pCI->requestNumber, &callModify, sizeOfCallModify, pRI);
-    if (callDetails.extras != NULL) {
-        for (int i = 0 ; i < callDetails.extrasLength ; i++) {
-#ifdef MEMSET_FREED
-            memsetString ((char*)(callDetails.extras[i]));
-#endif
-            free((char*)(callDetails.extras[i]));
-        }
-        memset(callDetails.extras, 0, sizeof(*callDetails.extras));
-    }
-
-#ifdef MEMSET_FREED
-    memset(&callDetails, 0, sizeof(callDetails));
-    memset(&callModify, 0, sizeof(callModify));
 #endif
 
     return;
@@ -1631,7 +1418,7 @@ static void dispatchRilCdmaSmsWriteArgs(Parcel &p, RequestInfo *pRI) {
     status = p.read(&uct,sizeof(uct));
     rcsw.message.sAddress.number_of_digits = (uint8_t) uct;
 
-    for(digitCount = 0 ; digitCount < rcsw.message.sAddress.number_of_digits; digitCount ++) {
+    for(digitCount = 0 ; digitCount < RIL_CDMA_SMS_ADDRESS_MAX; digitCount ++) {
         status = p.read(&uct,sizeof(uct));
         rcsw.message.sAddress.digits[digitCount] = (uint8_t) uct;
     }
@@ -1645,7 +1432,7 @@ static void dispatchRilCdmaSmsWriteArgs(Parcel &p, RequestInfo *pRI) {
     status = p.read(&uct,sizeof(uct));
     rcsw.message.sSubAddress.number_of_digits = (uint8_t) uct;
 
-    for(digitCount = 0 ; digitCount < rcsw.message.sSubAddress.number_of_digits; digitCount ++) {
+    for(digitCount = 0 ; digitCount < RIL_CDMA_SMS_SUBADDRESS_MAX; digitCount ++) {
         status = p.read(&uct,sizeof(uct));
         rcsw.message.sSubAddress.digits[digitCount] = (uint8_t) uct;
     }
@@ -1653,7 +1440,7 @@ static void dispatchRilCdmaSmsWriteArgs(Parcel &p, RequestInfo *pRI) {
     status = p.readInt32(&t);
     rcsw.message.uBearerDataLen = (int) t;
 
-    for(digitCount = 0 ; digitCount < rcsw.message.uBearerDataLen; digitCount ++) {
+    for(digitCount = 0 ; digitCount < RIL_CDMA_SMS_BEARER_DATA_MAX; digitCount ++) {
         status = p.read(&uct, sizeof(uct));
         rcsw.message.aBearerData[digitCount] = (uint8_t) uct;
     }
@@ -1934,7 +1721,7 @@ sendResponse (Parcel &p, int client_id) {
     return sendResponseRaw(p.data(), p.dataSize(), client_id);
 }
 
-/** response is null or an int* pointing to an array of ints*/
+/** response is an int* pointing to an array of ints*/
 
 static int
 responseInts(Parcel &p, void *response, size_t responselen) {
@@ -2064,7 +1851,20 @@ static int responseCallList(Parcel &p, void *response, size_t responselen) {
         p.writeInt32(p_cur->numberPresentation);
         writeStringToParcel(p, p_cur->name);
         p.writeInt32(p_cur->namePresentation);
-        appendPrintBuf("%s id=%d,%s,toa=%d,",
+        // Remove when partners upgrade to version 3
+        // We assume both RIL instances to comply with same RIL version.
+        // Hence checking just for s_callbacks[0].version
+        if ((s_callbacks[0].version < 3) || (p_cur->uusInfo == NULL || p_cur->uusInfo->uusData == NULL)) {
+            p.writeInt32(0); /* UUS Information is absent */
+        } else {
+            RIL_UUS_Info *uusInfo = p_cur->uusInfo;
+            p.writeInt32(1); /* UUS Information is present */
+            p.writeInt32(uusInfo->uusType);
+            p.writeInt32(uusInfo->uusDcs);
+            p.writeInt32(uusInfo->uusLength);
+            p.write(uusInfo->uusData, uusInfo->uusLength);
+        }
+        appendPrintBuf("%s[id=%d,%s,toa=%d,",
             printBuf,
             p_cur->index,
             callStateToString(p_cur->state),
@@ -2076,100 +1876,13 @@ static int responseCallList(Parcel &p, void *response, size_t responselen) {
             p_cur->als,
             (p_cur->isVoice)?"voc":"nonvoc",
             (p_cur->isVoicePrivacy)?"evp":"noevp");
-        appendPrintBuf("%s%s,cli=%d,name='%s',%d",
+        appendPrintBuf("%s%s,cli=%d,name='%s',%d]",
             printBuf,
             p_cur->number,
             p_cur->numberPresentation,
             p_cur->name,
             p_cur->namePresentation);
-
-        // Remove when partners upgrade to version 3
-        if ((s_callbacks[0].version < 3) || (p_cur->uusInfo == NULL || p_cur->uusInfo->uusData == NULL)) {
-            p.writeInt32(0); /* UUS Information is absent */
-        } else {
-            RIL_UUS_Info *uusInfo = p_cur->uusInfo;
-            p.writeInt32(1); /* UUS Information is present */
-            p.writeInt32(uusInfo->uusType);
-            p.writeInt32(uusInfo->uusDcs);
-            p.writeInt32(uusInfo->uusLength);
-            p.write(uusInfo->uusData, uusInfo->uusLength);
-
-            appendPrintBuf("%s,uusType=%d,uusDcs='%d',uusLength='%d',uusData='%s'",
-                    printBuf,
-                    uusInfo->uusType,
-                    uusInfo->uusDcs,
-                    uusInfo->uusLength,
-                    uusInfo->uusData);
-
-        }
-
-        if ( (sizeof(*p_cur) == sizeof(RIL_Call)) && (p_cur->callDetails != NULL)){
-            p.writeInt32(1); // Call Details is present
-            RIL_Call_Details *callDetails = p_cur->callDetails;
-            p.writeInt32(callDetails->callType);
-            p.writeInt32(callDetails->callDomain);
-            p.writeInt32(callDetails->extrasLength);
-            appendPrintBuf("%s,callType=%d,callDomain='%d',extrasLength='%d' ",
-                    printBuf,
-                    callDetails->callType,
-                    callDetails->callDomain,
-                    callDetails->extrasLength);
-            for (int i = 0 ; i < callDetails->extrasLength ; i++) {
-                writeStringToParcel (p, callDetails->extras[i]);
-                appendPrintBuf("%s%s,", printBuf, (char*)(callDetails->extras[i]));
-            }
-        } else {
-            p.writeInt32(0); // Call Details is absent
-        }
-
     }
-    removeLastChar;
-    closeResponse;
-
-    return 0;
-}
-
-static int responseModifyCall(Parcel &p, void *response, size_t responselen) {
-    int num;
-
-    if (response == NULL && responselen != 0) {
-        LOGE("invalid response: NULL");
-        return RIL_ERRNO_INVALID_RESPONSE;
-    }
-
-    if (responselen % sizeof (RIL_Call_Modify *) != 0) {
-        LOGE("invalid response length %d expected multiple of %d\n",
-                (int)responselen, (int)sizeof (RIL_Call_Modify *));
-        return RIL_ERRNO_INVALID_RESPONSE;
-    }
-
-    startResponse;
-
-    RIL_Call_Modify *p_cur = ((RIL_Call_Modify *) response);
-
-    p.writeInt32(p_cur->callIndex);
-    RIL_Call_Details *callDetails = p_cur->callDetails;
-
-    if (callDetails == NULL) {
-        LOGE("invalid Call Details" );
-        return RIL_ERRNO_INVALID_RESPONSE;
-    }
-
-    p.writeInt32(callDetails->callType);
-    p.writeInt32(callDetails->callDomain);
-    p.writeInt32(callDetails->extrasLength);
-
-    appendPrintBuf("%s,callType=%d,callDomain='%d',extrasLength='%d'",
-            printBuf,
-            callDetails->callType,
-            callDetails->callDomain,
-            callDetails->extrasLength);
-
-    for (int i = 0 ; i < callDetails->extrasLength ; i++) {
-        appendPrintBuf("%s%s,", printBuf, (char*)(callDetails->extras[i]));
-        writeStringToParcel (p, callDetails->extras[i]);
-    }
-
     removeLastChar;
     closeResponse;
 
@@ -2694,23 +2407,6 @@ static int responseCallRing(Parcel &p, void *response, size_t responselen) {
     }
 }
 
-static int responseEngineerMode(Parcel &p, void *response, size_t responselen) {
-    int i;
-
-    if (response == NULL && responselen != 0)
-    {
-        LOGE("invalid Engineer Mode response length  %d" ,responselen );
-        return RIL_ERRNO_INVALID_RESPONSE;
-    }
-
-    p.writeInt32(responselen/sizeof(int));
-    for ( i = 0; i < responselen/sizeof(int);i++ )
-    {
-        p.writeInt32(((unsigned int*)response)[i]);
-    }
-    return 0;
-}
-
 static int responseCdmaSignalInfoRecord(Parcel &p, void *response, size_t responselen) {
     if (response == NULL || responselen == 0) {
         LOGE("invalid response: NULL");
@@ -2943,13 +2639,7 @@ static void sendSimStatusAppInfo(Parcel &p, int num_apps, RIL_AppStatus appStatu
                                           (appStatus[i].app_label_ptr));
             p.writeInt32(appStatus[i].pin1_replaced);
             p.writeInt32(appStatus[i].pin1);
-            p.writeInt32(appStatus[i].pin1_num_retries);
-            p.writeInt32(appStatus[i].puk1_num_retries);
             p.writeInt32(appStatus[i].pin2);
-            p.writeInt32(appStatus[i].pin2_num_retries);
-            p.writeInt32(appStatus[i].puk2_num_retries);
-            p.writeInt32(appStatus[i].perso_retries);
-            p.writeInt32(appStatus[i].slot);
             appendPrintBuf("%s[app_type=%d,app_state=%d,perso_substate=%d,\
                     aid_ptr=%s,app_label_ptr=%s,pin1_replaced=%d,pin1=%d,pin2=%d],",
                     printBuf,
@@ -4181,11 +3871,8 @@ requestToString(int request) {
         case RIL_REQUEST_ENTER_DEPERSONALIZATION_CODE: return "ENTER_DEPERSONALIZATION_CODE";
         case RIL_REQUEST_GET_CURRENT_CALLS: return "GET_CURRENT_CALLS";
         case RIL_REQUEST_DIAL: return "DIAL";
-        case RIL_REQUEST_DIAL_VT: return "DIAL VT";
         case RIL_REQUEST_GET_IMSI: return "GET_IMSI";
         case RIL_REQUEST_HANGUP: return "HANGUP";
-        case RIL_REQUEST_HANGUP_VT: return "HANGUP VT";
-        case RIL_REQUEST_ANSWER_VT: return "ANSWER VT";
         case RIL_REQUEST_HANGUP_WAITING_OR_BACKGROUND: return "HANGUP_WAITING_OR_BACKGROUND";
         case RIL_REQUEST_HANGUP_FOREGROUND_RESUME_BACKGROUND: return "HANGUP_FOREGROUND_RESUME_BACKGROUND";
         case RIL_REQUEST_SWITCH_WAITING_OR_HOLDING_AND_ACTIVE: return "SWITCH_WAITING_OR_HOLDING_AND_ACTIVE";
@@ -4292,12 +3979,8 @@ requestToString(int request) {
         case RIL_REQUEST_MODIFY_QOS: return "REQUEST_MODIFY_QOS";
         case RIL_REQUEST_SUSPEND_QOS: return "REQUEST_SUSPEND_QOS";
         case RIL_REQUEST_RESUME_QOS: return "REQUEST_RESUME_QOS";
-        case RIL_REQUEST_CDMA_AVOID_SYSTEM: return "REQUEST_CDMA_AVOID_SYSTEM";
         case RIL_REQUEST_ACKNOWLEDGE_INCOMING_GSM_SMS_WITH_PDU: return "RIL_REQUEST_ACKNOWLEDGE_INCOMING_GSM_SMS_WITH_PDU";
         case RIL_REQUEST_STK_SEND_ENVELOPE_WITH_STATUS: return "RIL_REQUEST_STK_SEND_ENVELOPE_WITH_STATUS";
-        case RIL_REQUEST_MODIFY_CALL_INITIATE: return "RIL_REQUEST_MODIFY_CALL_INITIATE";
-        case RIL_REQUEST_MODIFY_CALL_CONFIRM: return "RIL_REQUEST_MODIFY_CALL_CONFIRM";
-        case RIL_REQUEST_ENABLE_ENGINEER_MODE: return "RIL_REQUEST_ENABLE_ENGINEER_MODE";
         case RIL_UNSOL_RESPONSE_RADIO_STATE_CHANGED: return "UNSOL_RESPONSE_RADIO_STATE_CHANGED";
         case RIL_UNSOL_RESPONSE_CALL_STATE_CHANGED: return "UNSOL_RESPONSE_CALL_STATE_CHANGED";
         case RIL_UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED: return "UNSOL_RESPONSE_VOICE_NETWORK_STATE_CHANGED";
@@ -4317,7 +4000,6 @@ requestToString(int request) {
         case RIL_UNSOL_SIM_REFRESH: return "UNSOL_SIM_REFRESH";
         case RIL_UNSOL_DATA_CALL_LIST_CHANGED: return "UNSOL_DATA_CALL_LIST_CHANGED";
         case RIL_UNSOL_CALL_RING: return "UNSOL_CALL_RING";
-        case RIL_UNSOL_CALL_RING_VT: return "UNSOL_VT_CALL_RING_UP";
         case RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED: return "UNSOL_RESPONSE_SIM_STATUS_CHANGED";
         case RIL_UNSOL_RESPONSE_CDMA_NEW_SMS: return "UNSOL_NEW_CDMA_SMS";
         case RIL_UNSOL_RESPONSE_NEW_BROADCAST_SMS: return "UNSOL_NEW_BROADCAST_SMS";
@@ -4333,7 +4015,6 @@ requestToString(int request) {
         case RIL_UNSOL_CDMA_SUBSCRIPTION_SOURCE_CHANGED: return "UNSOL_CDMA_SUBSCRIPTION_SOURCE_CHANGED";
         case RIL_UNSOL_CDMA_PRL_CHANGED: return "UNSOL_CDMA_PRL_CHANGED";
         case RIL_UNSOL_EXIT_EMERGENCY_CALLBACK_MODE: return "UNSOL_EXIT_EMERGENCY_CALLBACK_MODE";
-        case RIL_UNSOL_MODIFY_CALL: return "UNSOL_MODIFY_CALL";
         case RIL_UNSOL_RIL_CONNECTED: return "UNSOL_RIL_CONNECTED";
         case RIL_UNSOL_VOICE_RADIO_TECH_CHANGED: return "UNSOL_VOICE_RADIO_TECH_CHANGED";
         case RIL_UNSOL_SUPP_SVC_NOTIFICATION: return "UNSOL_SUPP_SVC_NOTIFICATION";
@@ -4341,7 +4022,6 @@ requestToString(int request) {
         case RIL_UNSOL_RESPONSE_TETHERED_MODE_STATE_CHANGED: return "RIL_UNSOL_RESPONSE_TETHERED_MODE_STATE_CHANGED";
         case RIL_UNSOL_UICC_SUBSCRIPTION_STATUS_CHANGED: return "UNSOL_UICC_SUBSCRIPTION_STATUS_CHANGED";
         case RIL_UNSOL_QOS_STATE_CHANGED_IND: return "UNSOL_QOS_STATE_CHANGED_IND";
-        case RIL_UNSOL_ENGINEER_MODE: return "UNSOL_ENGINEER_MODE";
         default: return "<unknown request>";
     }
 }
