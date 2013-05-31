@@ -54,7 +54,7 @@
     {RIL_REQUEST_SMS_ACKNOWLEDGE, dispatchInts, responseVoid},
     {RIL_REQUEST_GET_IMEI, dispatchVoid, responseString},
     {RIL_REQUEST_GET_IMEISV, dispatchVoid, responseString},
-    {RIL_REQUEST_ANSWER, dispatchVoidOrInts, responseVoid},
+    {RIL_REQUEST_ANSWER,dispatchVoid, responseVoid},
     {RIL_REQUEST_DEACTIVATE_DATA_CALL, dispatchStrings, responseVoid},
     {RIL_REQUEST_QUERY_FACILITY_LOCK, dispatchStrings, responseInts},
     {RIL_REQUEST_SET_FACILITY_LOCK, dispatchStrings, responseInts},
