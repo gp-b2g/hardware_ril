@@ -113,7 +113,7 @@ int main(int argc, char **argv)
 {
     const char * rilLibPath = NULL;
     char **rilArgv;
-    static char * s_argv[MAX_LIB_ARGS];
+    static char * s_argv[MAX_LIB_ARGS] = {NULL};
     void *dlHandle;
     const RIL_RadioFunctions *(*rilInit)(const struct RIL_Env *, int, char **);
     const RIL_RadioFunctions *funcs_inst[NUM_CLIENTS] = {NULL, NULL};
@@ -126,7 +126,7 @@ int main(int argc, char **argv)
 
     LOGE("**RIL Daemon Started**");
     LOGE("**RILd param count=%d**", argc);
-    memset(s_argv, 0, MAX_LIB_ARGS*sizeof(char));
+    memset(s_argv, 0, sizeof(s_argv));
 
     s_argv[0] = argv[0];
 

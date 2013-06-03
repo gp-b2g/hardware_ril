@@ -379,6 +379,12 @@ int voiceRadioTech = -1;
  */
 int cdmaSubscriptionSource = -1;
 
+/* For older RILs that do not send RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED, decode the
+   SIM/RUIM state from radio state and store it. Every time there is a change in Radio State,
+   check to see if SIM/RUIM status changed and notify telephony
+ */
+int simRuimStatus = -1;
+
 static char *
 strdupReadString(Parcel &p) {
     size_t stringlen;
@@ -3878,6 +3884,25 @@ decodeCdmaSubscriptionSource (RIL_RadioState radioState) {
     }
 }
 
+static int
+decodeSimStatus (RIL_RadioState radioState) {
+   switch (radioState) {
+       case RADIO_STATE_SIM_NOT_READY:
+       case RADIO_STATE_RUIM_NOT_READY:
+       case RADIO_STATE_NV_NOT_READY:
+       case RADIO_STATE_NV_READY:
+           return -1;
+       case RADIO_STATE_SIM_LOCKED_OR_ABSENT:
+       case RADIO_STATE_SIM_READY:
+       case RADIO_STATE_RUIM_READY:
+       case RADIO_STATE_RUIM_LOCKED_OR_ABSENT:
+           return radioState;
+       default:
+           LOGD("decodeSimStatus: Invoked with incorrect RadioState");
+           return -1;
+   }
+}
+
 static bool is3gpp2(int radioTech) {
     switch (radioTech) {
         case RADIO_TECH_IS95A:
@@ -3903,6 +3928,7 @@ processRadioState(RIL_RadioState newRadioState, int client_id) {
     if((newRadioState > RADIO_STATE_UNAVAILABLE) && (newRadioState < RADIO_STATE_ON)) {
         int newVoiceRadioTech;
         int newCdmaSubscriptionSource;
+        int newSimStatus;
 
         /* This is old RIL. Decode Subscription source and Voice Radio Technology
            from Radio State and send change notifications if there has been a change */
@@ -3919,6 +3945,11 @@ processRadioState(RIL_RadioState newRadioState, int client_id) {
                 RIL_onUnsolicitedSendResponse (RIL_UNSOL_CDMA_SUBSCRIPTION_SOURCE_CHANGED,
                         &cdmaSubscriptionSource, sizeof(cdmaSubscriptionSource), client_id);
             }
+        }
+        newSimStatus = decodeSimStatus(newRadioState);
+        if(newSimStatus != simRuimStatus) {
+            simRuimStatus = newSimStatus;
+            RIL_onUnsolicitedResponse(RIL_UNSOL_RESPONSE_SIM_STATUS_CHANGED, NULL, 0);
         }
 
         /* Send RADIO_ON to telephony */

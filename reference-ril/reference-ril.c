@@ -2408,7 +2408,25 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
             }
             break;
         }
-       case RIL_REQUEST_SETUP_QOS:
+
+        case RIL_REQUEST_VOICE_RADIO_TECH:
+            {
+                int tech = techFromModemType(TECH(sMdmInfo));
+                if (tech < 0 )
+                    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
+                else
+                    RIL_onRequestComplete(t, RIL_E_SUCCESS, &tech, sizeof(tech));
+            }
+            break;
+        case RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE:
+            requestSetPreferredNetworkType(request, data, datalen, t);
+            break;
+
+        case RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE:
+            requestGetPreferredNetworkType(request, data, datalen, t);
+            break;
+
+        case RIL_REQUEST_SETUP_QOS:
             requestSetupQos(data, datalen, t);
             break;
 
@@ -2430,23 +2448,6 @@ onRequest (int request, void *data, size_t datalen, RIL_Token t)
 
         case RIL_REQUEST_GET_QOS_STATUS:
             requestGetQosStatus(data, datalen, t);
-            break;
-
-        case RIL_REQUEST_VOICE_RADIO_TECH:
-            {
-                int tech = techFromModemType(TECH(sMdmInfo));
-                if (tech < 0 )
-                    RIL_onRequestComplete(t, RIL_E_GENERIC_FAILURE, NULL, 0);
-                else
-                    RIL_onRequestComplete(t, RIL_E_SUCCESS, &tech, sizeof(tech));
-            }
-            break;
-        case RIL_REQUEST_SET_PREFERRED_NETWORK_TYPE:
-            requestSetPreferredNetworkType(request, data, datalen, t);
-            break;
-
-        case RIL_REQUEST_GET_PREFERRED_NETWORK_TYPE:
-            requestGetPreferredNetworkType(request, data, datalen, t);
             break;
 
         /* CDMA Specific Requests */
@@ -2614,7 +2615,6 @@ getRUIMStatus()
     char *cpinLine;
     char *cpinResult;
 
-    LOGD("getSIMStatus(). sState: %d",sState);
     if (sState == RADIO_STATE_OFF || sState == RADIO_STATE_UNAVAILABLE) {
         ret = SIM_NOT_READY;
         goto done;
@@ -2692,6 +2692,7 @@ getSIMStatus()
     char *cpinLine;
     char *cpinResult;
 
+    LOGD("getSIMStatus(). sState: %d",sState);
     if (sState == RADIO_STATE_OFF || sState == RADIO_STATE_UNAVAILABLE) {
         ret = SIM_NOT_READY;
         goto done;
